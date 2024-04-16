@@ -13,14 +13,16 @@ USE SCHEMA PENTA_SCHEMA;
 --                            실 프로젝트에서는 생성해야 한다.
 ------------------------------------------------------------------------------------
 
--- CREATE USER MASK 
--- PASSWORD='mask'
--- MUST_CHANGE_PASSWORD = TRUE
--- DEFAULT_ROLE = PBI_ROLE
+CREATE USER MASK 
+PASSWORD='mask'
+MUST_CHANGE_PASSWORD = TRUE
+DEFAULT_ROLE = PBI_ROLE;
 
--- SHOW USERS;
+SHOW USERS;
 
--- DESC USER MASK;
+DESC USER MASK;
+
+DROP USER MASK;
 
 CREATE ROLE PBI_ROLE;                                                -- PBI ROLE 생성
 GRANT USAGE ON DATABASE HYUNDAI_DB TO ROLE PBI_ROLE;                 -- PBI ROLE에게 DB 활용 권한 부여
@@ -34,9 +36,11 @@ GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;                -- PBI ROLE
 
 -- 사용자에게 생성한 Role 부여
 GRANT ROLE PBI_ROLE TO USER PENTA_02;
+GRANT ROLE PBI_ROLE TO USER MASK;
 
 -- 사용자에게 생성한 Role 회수
 REVOKE ROLE PBI_ROLE FROM USER PENTA_02;
+REVOKE ROLE PBI_ROLE FROM USER MASK;
 
 GRANT ROLE PBI_ROLE TO ROLE ACCOUNTADMIN;
 REVOKE ROLE PBI_ROLE FROM ROLE ACCOUNTADMIN;
@@ -59,16 +63,13 @@ CREATE OR REPLACE TABLE OG_TABLE AS
     FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
 
-    
-SELECT * FROM OG_TABLE LIMIT 4;
-
 
 INSERT INTO OG_TABLE 
     SELECT * FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1 
     WHERE LENGTH(t1.dpts_pch_cd) = 6
     LIMIT 1;
 
-
+    
 ------------------------------------------------------------------------------------
 --■■■■■■■■■■■■■■■ TEST를 위한 DYNAMIC TABLEs 생성 : DPTS_PCH_CD를 마스킹할 예정 ■■■■■■■■■■■■■■■■■
 ------------------------------------------------------------------------------------
@@ -151,6 +152,12 @@ USE ROLE ACCOUNTADMIN;
 --■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 오리진에서 정책 적용하면 DT에도 적용될까? ■■■■■■■■■■■■■■■■■
 ------------------------------------------------------------------------------------------------
 
+-------------------------------------------------------------------------
+--                                                                     --
+--              오리진 생성 후 정책 적용 -> Dynamic Table 확인             --
+--                                                                     --
+-------------------------------------------------------------------------
+
 -- Table 생성
 CREATE OR REPLACE TABLE OG_TABLE_PC AS 
     SELECT * 
@@ -183,13 +190,76 @@ WAREHOUSE = COMPUTE_WH
 AS
 SELECT * FROM OG_TABLE_PC;
 
+
+-- ERROR LOG
 -- Failed to refresh dynamic table with refresh_trigger INITIAL at data_timestamp 1713250826808 because of the error: 
--- SQL compilation error: Target table failed to refresh: SQL compilation error: Dynamic Table 'MASKING_TEST3' needs to be recreated because a base table changed.
+-- SQL compilation error: Target table failed to refresh: 
+-- SQL compilation error: Dynamic Table 'MASKING_TEST3' needs to be recreated because a base table changed.
 
 
 -------------------------------------------------------------------------------------------------------------
 --■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 -------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+--                                                                     --
+--              오리진 생성 후 정책 적용 -> Dynamic Table 확인             --
+--                                      REFRESH_MODE = FULL            --
+-------------------------------------------------------------------------
+
+
+-- Table 생성
+CREATE OR REPLACE TABLE OG_TABLE_PC AS 
+    SELECT * 
+    FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
+    WHERE LENGTH(t1.dpts_pch_cd) = 6;
+
+-- Table 확인
+SELECT * FROM OG_TABLE_PC;
+
+-- PBI ROLE에게 특정 테이블 조회 권한 부여
+GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE_PC TO ROLE PBI_ROLE;   
+
+-- 마스킹 정책 적용
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+
+-- 역할 변경
+USE ROLE PBI_ROLE;
+
+-- 확인
+SELECT DPTS_PCH_CD, DPTS_PCH_NM 
+FROM OG_TABLE_PC;
+
+-- 역할 변경
+USE ROLE ACCOUNTADMIN;
+
+-- Dynamic Table 생성 
+CREATE OR REPLACE DYNAMIC TABLE MASKING_TEST3
+TARGET_LAG = '1 hours'
+REFRESH_MODE = FULL
+WAREHOUSE = COMPUTE_WH
+AS
+SELECT * FROM OG_TABLE_PC;
+
+
+-- ERROR LOG
+-- Failed to refresh dynamic table with refresh_trigger INITIAL at data_timestamp 1713251963336 because of the error: 
+-- SQL compilation error: 
+-- Target table failed to refresh: 
+-- SQL compilation error: 
+-- Dynamic Table 'MASKING_TEST3' needs to be recreated because a base table changed.
+
+
+-------------------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+-------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+--                                                                     --
+--            오리진, DT 생성 후 -> 오리진에 정책 적용 -> Refresh           --
+--                                                                     --
+-------------------------------------------------------------------------
+
 
 -- Table Drop
 DROP TABLE OG_TABLE_PC;
@@ -213,15 +283,62 @@ ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY T
 -- 새로고침 시도
 ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
 
+
+-- ERROR LOG
 -- Failed to refresh dynamic table with refresh_trigger MANUAL at data_timestamp 1713250979771 because of the error: SQL compilation error: 
 -- Target table failed to refresh: SQL execution error: 
--- Dynamic table 'HYUNDAI_DB.PENTA_SCHEMA.MASKING_TEST3' is no longer incrementalizable because of reason 'Dynamic Tables only support 'FULL' refresh mode for sources with 'MASKING POLICY'. 
+-- Dynamic table 'HYUNDAI_DB.PENTA_SCHEMA.MASKING_TEST3' is no longer incrementalizable because of reason 
+-- 'Dynamic Tables only support 'FULL' refresh mode for sources with 'MASKING POLICY'. 
 -- Either remove the policy from 'HYUNDAI_DB.PENTA_SCHEMA.OG_TABLE_PC' or recreate the Dynamic Table.'. 
 -- Please recreate the dynamic table.
 
+
+-------------------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+-------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+--                                                                     --
+--            오리진, DT 생성 후 -> 오리진에 정책 적용 -> Refresh           --
+--                                      REFRESH_MODE = FULL            --
+-------------------------------------------------------------------------
+
+-- Table Drop
+DROP TABLE OG_TABLE_PC;
+DROP TABLE MASKING_TEST3;
+
+-- Table 생성
+CREATE OR REPLACE TABLE OG_TABLE_PC AS 
+    SELECT * 
+    FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
+    WHERE LENGTH(t1.dpts_pch_cd) = 6;
+
+-- Dynamic Table 생성 
+CREATE OR REPLACE DYNAMIC TABLE MASKING_TEST3
+TARGET_LAG = '1 hours'
+REFRESH_MODE = FULL
+WAREHOUSE = COMPUTE_WH
+AS
+SELECT * FROM OG_TABLE_PC;
+
+-- 마스킹 정책 적용
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+
+-- 새로고침 시도
+ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
+
+
+-- ERROR LOG
+-- Failed to refresh dynamic table with refresh_trigger MANUAL at data_timestamp 1713251825545 because of the error: 
+-- SQL compilation error: 
+-- Target table failed to refresh: 
+-- SQL compilation error: 
+-- Dynamic Table 'MASKING_TEST3' needs to be recreated because a base table changed.
+
+
 ------------------------------------------------------------------------------------------------
---■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 오리진에서 정책 적용하면 DT에도 적용될까? ■■■■■■■■■■■■■■■■■
---                        Dynamic Table 새로고침에 문제가 생겨서 불가능
+--■■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 오리진에서 정책 적용하면 DT에도 적용될까? ■■■■■■■■■■■■■■■■■■■
+--                                          X
 ------------------------------------------------------------------------------------------------
 
 
