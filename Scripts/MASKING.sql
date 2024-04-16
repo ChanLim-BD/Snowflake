@@ -8,39 +8,40 @@ USE WAREHOUSE COMPUTE_WH;
 USE DATABASE HYUNDAI_DB;
 USE SCHEMA PENTA_SCHEMA;
 
-------------------------------------------------------------------------------------
---■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ User, Role 생성 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
---                            실 프로젝트에서는 생성해야 한다.
-------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ User, Role 생성 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+--                                           실 프로젝트에서는 생성해야 한다.
+------------------------------------------------------------------------------------------------------------------
 
-CREATE USER MASK 
-PASSWORD='mask'
-MUST_CHANGE_PASSWORD = TRUE
-DEFAULT_ROLE = PBI_ROLE;
+-- CREATE USER MASK 
+-- PASSWORD='mask'
+-- MUST_CHANGE_PASSWORD = TRUE
+-- DEFAULT_ROLE = PBI_ROLE;
 
-SHOW USERS;
+-- SHOW USERS;
 
-DESC USER MASK;
+-- DESC USER MASK;
 
-DROP USER MASK;
+-- DROP USER MASK;
 
-CREATE ROLE PBI_ROLE;                                                -- PBI ROLE 생성
-GRANT USAGE ON DATABASE HYUNDAI_DB TO ROLE PBI_ROLE;                 -- PBI ROLE에게 DB 활용 권한 부여
-GRANT USAGE ON SCHEMA PENTA_SCHEMA TO ROLE PBI_ROLE;                 -- PBI ROLE에게 SCHEMA 활용 권한 부여
-GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE TO ROLE PBI_ROLE;        -- PBI ROLE에게 특정 테이블 조회 권한 부여
-GRANT SELECT ON TABLE PENTA_SCHEMA.MASKING_TEST1 TO ROLE PBI_ROLE;   -- PBI ROLE에게 특정 테이블 조회 권한 부여
-GRANT SELECT ON TABLE PENTA_SCHEMA.MASKING_TEST2 TO ROLE PBI_ROLE;   -- PBI ROLE에게 특정 테이블 조회 권한 부여
-GRANT SELECT ON ALL TABLES IN SCHEMA PENTA_SCHEMA TO ROLE PBI_ROLE;  -- PBI ROLE에게 특정 스키마 내의 모든 테이블 조회 권한 부여
-GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;              -- PBI ROLE에게 COMPUTE_WH명의 웨어하우스 동작 권한 부여 
-GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;                -- PBI ROLE에게 COMPUTE_WH명의 웨어하우스 사용 권한 부여
+CREATE ROLE PBI_ROLE;                                                           -- PBI ROLE 생성
+GRANT USAGE ON DATABASE HYUNDAI_DB TO ROLE PBI_ROLE;                            -- PBI ROLE에게 DB 활용 권한 부여
+GRANT USAGE ON SCHEMA PENTA_SCHEMA TO ROLE PBI_ROLE;                            -- PBI ROLE에게 SCHEMA 활용 권한 부여
+GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE TO ROLE PBI_ROLE;                   -- PBI ROLE에게 특정 테이블 조회 권한 부여
+GRANT SELECT ON TABLE PENTA_SCHEMA.MASKING_TEST1 TO ROLE PBI_ROLE;              -- PBI ROLE에게 특정 테이블 조회 권한 부여
+GRANT SELECT ON TABLE PENTA_SCHEMA.MASKING_TEST2 TO ROLE PBI_ROLE;              -- PBI ROLE에게 특정 테이블 조회 권한 부여
+GRANT SELECT ON ALL TABLES IN SCHEMA HYUNDAI_DB.PENTA_SCHEMA TO ROLE PBI_ROLE;  -- PBI ROLE에게 특정 스키마 내의 모든 테이블 조회 권한 부여
+GRANT SELECT ON FUTURE TABLES IN DATABASE HYUNDAI_DB TO ROLE PBI_ROLE;          -- PBI ROLE에게 미래의 대한 테이블 조회 권한 부여
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;                         -- PBI ROLE에게 COMPUTE_WH명의 웨어하우스 동작 권한 부여 
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;                           -- PBI ROLE에게 COMPUTE_WH명의 웨어하우스 사용 권한 부여
 
 -- 사용자에게 생성한 Role 부여
 GRANT ROLE PBI_ROLE TO USER PENTA_02;
-GRANT ROLE PBI_ROLE TO USER MASK;
+-- GRANT ROLE PBI_ROLE TO USER MASK;
 
 -- 사용자에게 생성한 Role 회수
 REVOKE ROLE PBI_ROLE FROM USER PENTA_02;
-REVOKE ROLE PBI_ROLE FROM USER MASK;
+-- REVOKE ROLE PBI_ROLE FROM USER MASK;
 
 GRANT ROLE PBI_ROLE TO ROLE ACCOUNTADMIN;
 REVOKE ROLE PBI_ROLE FROM ROLE ACCOUNTADMIN;
@@ -149,7 +150,7 @@ USE ROLE ACCOUNTADMIN;
 
 
 ------------------------------------------------------------------------------------------------
---■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 오리진에서 정책 적용하면 DT에도 적용될까? ■■■■■■■■■■■■■■■■■
+--■■■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 오리진에서 정책 적용하면 DT에도 적용될까? ■■■■■■■■■■■■■■■■■■
 ------------------------------------------------------------------------------------------------
 
 -------------------------------------------------------------------------
@@ -158,30 +159,38 @@ USE ROLE ACCOUNTADMIN;
 --                                                                     --
 -------------------------------------------------------------------------
 
+
+-- PBI ROLE에게 특정 테이블 조회 권한 부여
+GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE_PC TO ROLE PBI_ROLE;   
+
+
 -- Table 생성
 CREATE OR REPLACE TABLE OG_TABLE_PC AS 
     SELECT * 
     FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
 
+    
 -- Table 확인
 SELECT * FROM OG_TABLE_PC;
 
--- PBI ROLE에게 특정 테이블 조회 권한 부여
-GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE_PC TO ROLE PBI_ROLE;   
 
 -- 마스킹 정책 적용
 ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
 
+
 -- 역할 변경
 USE ROLE PBI_ROLE;
+
 
 -- 확인
 SELECT DPTS_PCH_CD, DPTS_PCH_NM 
 FROM OG_TABLE_PC;
 
+
 -- 역할 변경
 USE ROLE ACCOUNTADMIN;
+
 
 -- Dynamic Table 생성 
 CREATE OR REPLACE DYNAMIC TABLE MASKING_TEST3
@@ -214,24 +223,31 @@ CREATE OR REPLACE TABLE OG_TABLE_PC AS
     FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
 
+    
 -- Table 확인
 SELECT * FROM OG_TABLE_PC;
+
 
 -- PBI ROLE에게 특정 테이블 조회 권한 부여
 GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE_PC TO ROLE PBI_ROLE;   
 
+
 -- 마스킹 정책 적용
 ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
 
+
 -- 역할 변경
 USE ROLE PBI_ROLE;
+
 
 -- 확인
 SELECT DPTS_PCH_CD, DPTS_PCH_NM 
 FROM OG_TABLE_PC;
 
+
 -- 역할 변경
 USE ROLE ACCOUNTADMIN;
+
 
 -- Dynamic Table 생성 
 CREATE OR REPLACE DYNAMIC TABLE MASKING_TEST3
@@ -264,12 +280,14 @@ SELECT * FROM OG_TABLE_PC;
 -- Table Drop
 DROP TABLE OG_TABLE_PC;
 
+
 -- Table 생성
 CREATE OR REPLACE TABLE OG_TABLE_PC AS 
     SELECT * 
     FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
 
+    
 -- Dynamic Table 생성 
 CREATE OR REPLACE DYNAMIC TABLE MASKING_TEST3
 TARGET_LAG = '1 hours'
@@ -277,8 +295,10 @@ WAREHOUSE = COMPUTE_WH
 AS
 SELECT * FROM OG_TABLE_PC;
 
+
 -- 마스킹 정책 적용
 ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+
 
 -- 새로고침 시도
 ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
@@ -300,20 +320,22 @@ ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
 -------------------------------------------------------------------------
 --                                                                     --
 --            오리진, DT 생성 후 -> 오리진에 정책 적용 -> Refresh           --
---                                      REFRESH_MODE = FULL            --
+--                                             REFRESH_MODE = FULL     --
 -------------------------------------------------------------------------
 
 -- Table Drop
 DROP TABLE OG_TABLE_PC;
 DROP TABLE MASKING_TEST3;
 
+
 -- Table 생성
-CREATE OR REPLACE TABLE OG_TABLE_PC AS 
+CREATE OR REPLACE TABLE OG_TABLE_PC2 AS 
     SELECT * 
     FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
 
--- Dynamic Table 생성 
+    
+-- Dynamic Table 생성 HYUNDAI_DB.PENTA_SCHEMA
 CREATE OR REPLACE DYNAMIC TABLE MASKING_TEST3
 TARGET_LAG = '1 hours'
 REFRESH_MODE = FULL
@@ -321,8 +343,10 @@ WAREHOUSE = COMPUTE_WH
 AS
 SELECT * FROM OG_TABLE_PC;
 
+
 -- 마스킹 정책 적용
 ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+
 
 -- 새로고침 시도
 ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
