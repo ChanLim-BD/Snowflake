@@ -44,15 +44,24 @@ USE SCHEMA PENTA_SCHEMA;
 CREATE ROLE PBI_ROLE;                                                           -- PBI ROLE 생성
 GRANT USAGE ON DATABASE HYUNDAI_DB TO ROLE PBI_ROLE;                            -- PBI ROLE에게 DB 활용 권한 부여
 GRANT USAGE ON SCHEMA PENTA_SCHEMA TO ROLE PBI_ROLE;                            -- PBI ROLE에게 SCHEMA 활용 권한 부여
+
 GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE TO ROLE PBI_ROLE;                   -- PBI ROLE에게 특정 테이블 조회 권한 부여
 GRANT SELECT ON TABLE PENTA_SCHEMA.MASKING_TEST1 TO ROLE PBI_ROLE;              -- PBI ROLE에게 특정 테이블 조회 권한 부여
 GRANT SELECT ON TABLE PENTA_SCHEMA.MASKING_TEST2 TO ROLE PBI_ROLE;              -- PBI ROLE에게 특정 테이블 조회 권한 부여
 GRANT SELECT ON ALL TABLES IN SCHEMA HYUNDAI_DB.PENTA_SCHEMA TO ROLE PBI_ROLE;  -- PBI ROLE에게 특정 스키마 내의 모든 테이블 조회 권한 부여
+
 GRANT SELECT ON FUTURE TABLES IN DATABASE HYUNDAI_DB TO ROLE PBI_ROLE;          -- PBI ROLE에게 미래의 대한 테이블 조회 권한 부여
+
 GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;                         -- PBI ROLE에게 COMPUTE_WH명의 웨어하우스 동작 권한 부여 
 GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PBI_ROLE;                           -- PBI ROLE에게 COMPUTE_WH명의 웨어하우스 사용 권한 부여
 
--- 사용자에게 생성한 Role 부여
+
+-----------------------------------------------
+--                                           --
+--       새로운 사용자에게 새로운 역할 부여       --
+--                                           --
+-----------------------------------------------
+
 GRANT ROLE PBI_ROLE TO USER PENTA_02;
 -- GRANT ROLE PBI_ROLE TO USER MASK;
 
@@ -60,13 +69,9 @@ GRANT ROLE PBI_ROLE TO USER PENTA_02;
 REVOKE ROLE PBI_ROLE FROM USER PENTA_02;
 -- REVOKE ROLE PBI_ROLE FROM USER MASK;
 
-GRANT ROLE PBI_ROLE TO ROLE ACCOUNTADMIN;
-REVOKE ROLE PBI_ROLE FROM ROLE ACCOUNTADMIN;
 
 -- 현재 Role 확인
 SELECT CURRENT_ROLE();
--- SELECT CURRENT_DATABASE();
--- SELECT CURRENT_SCHEMA();
 
 
 -- 역할 부여 확인하는 두 Queries
@@ -82,7 +87,7 @@ SHOW ROLES;
 
 CREATE OR REPLACE TABLE OG_TABLE AS 
     SELECT * 
-    FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
+    FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD_LOG t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
 
 
@@ -110,9 +115,11 @@ SELECT * FROM MASKING_TEST1;
 SELECT * FROM MASKING_TEST2;
 
 
+
 ------------------------------------------------------------------------------------
 --■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE 생성 : DPTS_PCH_CD를 마스킹할 예정 ■■■■■■■■■■■■■■■■■
 ------------------------------------------------------------------------------------
+
 
 -- 현재 사용자의 역할에 PBI_ROLE이 없다면, 마스킹 적용 
 CREATE OR REPLACE MASKING POLICY TEST1 AS (VAL STRING) RETURNS STRING ->
@@ -138,8 +145,11 @@ SHOW MASKING POLICIES IN SCHEMA PENTA_SCHEMA;
 
 
 -- 마스킹 정책 적용
-ALTER TABLE IF EXISTS MASKING_TEST1 MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST1;
-ALTER TABLE IF EXISTS MASKING_TEST2 MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+ALTER TABLE IF EXISTS MASKING_TEST1 MODIFY COLUMN DPTS_PCH_CD 
+SET MASKING POLICY TEST1;
+
+ALTER TABLE IF EXISTS MASKING_TEST2 MODIFY COLUMN DPTS_PCH_CD 
+SET MASKING POLICY TEST2;
 
 
 -- 역할 변경
@@ -176,7 +186,8 @@ FROM MASKING_TEST2;
 
 
 ------------------------------------------------------------------------------------
---■■■■■■■■■■■■■■■ 데이터를 삽입해도 마스킹 정책이 그대로 유지되는지 확인하기 ■■■■■■■■■■■■■■■■■
+--■■■■■■■■■■■■■■■ ORIGIN에 데이터를 삽입 후, DYNAMIC TABLE 새로고침 이후,  ■■■■■■■■■■■■■■■■■
+--■■■■■■■■■■■■■■■         마스킹 정책이 그대로 유지되는지 확인하기          ■■■■■■■■■■■■■■■■■
 ------------------------------------------------------------------------------------
 
 -- 테이블에 데이터 삽입하는 쿼리.
@@ -213,11 +224,11 @@ FROM MASKING_TEST2;
 USE ROLE ACCOUNTADMIN;
 
 
---------------------------------------------------------------------------------------
---■■■■■■■■■■■■■■■ 데이터를 삽입해도 마스킹 정책이 그대로 유지되는지 확인하기 [完] ■■■■■■■■■■■■■■■■■
---------------------------------------------------------------------------------------
 
-
+------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■ ORIGIN에 데이터를 삽입 후, DYNAMIC TABLE 새로고침 이후,  ■■■■■■■■■■■■■■■■■
+--■■■■■■■■■■■■■■■         마스킹 정책이 그대로 유지되는지 확인             ■■■■■■■■■■■■■■■■■
+------------------------------------------------------------------------------------
 
 
 ------------------------------------------------------------------------------------------------
@@ -287,6 +298,7 @@ SELECT * FROM OG_TABLE_PC;
 --                                                                     --
 --              오리진 생성 후 정책 적용 -> Dynamic Table 확인             --
 --                                      REFRESH_MODE = FULL            --
+--                                                                     --
 -------------------------------------------------------------------------
 
 
@@ -394,6 +406,7 @@ ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
 --                                                                     --
 --            오리진, DT 생성 후 -> 오리진에 정책 적용 -> Refresh           --
 --                                             REFRESH_MODE = FULL     --
+--                                                                     --
 -------------------------------------------------------------------------
 
 -- Table Drop
@@ -433,9 +446,217 @@ ALTER DYNAMIC TABLE MASKING_TEST3 REFRESH;
 -- Dynamic Table 'MASKING_TEST3' needs to be recreated because a base table changed.
 
 
+-- ERROR MESSAGE 모음
+SELECT
+*
+FROM
+  TABLE (
+    INFORMATION_SCHEMA.DYNAMIC_TABLE_REFRESH_HISTORY (
+      NAME_PREFIX => 'HYUNDAI_DB.PENTA_SCHEMA.', ERROR_ONLY => TRUE
+    )
+  )
+ORDER BY
+  name,
+  data_timestamp;
+
 ------------------------------------------------------------------------------------------------
 --■■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 오리진에서 정책 적용하면 DT에도 적용될까? ■■■■■■■■■■■■■■■■■■■
 --■■■■■■■■■■■■■■■■                              X                               ■■■■■■■■■■■■■■■■■■■
+--                       즉, Dynamic Table에 직접 마스킹 정책을 주입해야 한다.
 ------------------------------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ TEST를 위한 OG_TABLE_PC : 중첩 정책이라면? ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+------------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 동일한 열에 두 개 이상의 마스킹 정책 적용 건. ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+------------------------------------------------------------------------------------------------
+
+
+-- Table 생성
+CREATE OR REPLACE TABLE OG_TABLE_PC AS 
+    SELECT * 
+    FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD t1
+    WHERE LENGTH(t1.dpts_pch_cd) = 6;
+
+
+-- PBI ROLE에게 특정 테이블 조회 권한 부여
+GRANT SELECT ON TABLE PENTA_SCHEMA.OG_TABLE_PC TO ROLE PBI_ROLE;   
+
+    
+-- Table 확인
+SELECT * FROM OG_TABLE_PC LIMIT 1;
+
+
+-- 현재 사용자의 역할에 PBI_ROLE이 있다면, 마스킹 적용 
+CREATE OR REPLACE MASKING POLICY TEST2 AS (VAL STRING) RETURNS STRING ->
+    CASE
+        WHEN CURRENT_ROLE() NOT IN ('PBI_ROLE') 
+            THEN VAL
+        ELSE CONCAT(SUBSTR(VAL, 0, 2), '********')
+    END;
+
+    
+-- 현재 사용자의 역할에 PBI_ROLE이 있다면, 마스킹 적용 
+CREATE OR REPLACE MASKING POLICY TEST3 AS (VAL STRING) RETURNS STRING ->
+    CASE
+        WHEN CURRENT_ROLE() NOT IN ('PBI_ROLE') 
+            THEN VAL
+        ELSE CONCAT(SUBSTR(VAL, 0, 4), '★★★★★★★')
+    END;
+    
+
+-- 마스킹 정책 적용
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST3;
+
+-- Specified column already attached to another masking policy. 
+-- A column cannot be attached to multiple masking policies. 
+-- Please drop the current association in order to attach a new masking policy.
+
+
+------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 동일한 열에 두 개 이상의 마스킹 정책 적용 안됌 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+------------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 서로 다른 열에 두 개 이상의 마스킹 정책 적용 건. ■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+------------------------------------------------------------------------------------------------
+
+
+-- 현재 사용자의 역할에 PBI_ROLE이 있다면, 마스킹 적용 
+CREATE OR REPLACE MASKING POLICY TEST2 AS (VAL STRING) RETURNS STRING ->
+    CASE
+        WHEN CURRENT_ROLE() NOT IN ('PBI_ROLE') 
+            THEN VAL
+        ELSE CONCAT(SUBSTR(VAL, 0, 2), '********')
+    END;
+
+    
+-- 현재 사용자의 역할에 PBI_ROLE이 있다면, 마스킹 적용 
+CREATE OR REPLACE MASKING POLICY TEST3 AS (VAL STRING) RETURNS STRING ->
+    CASE
+        WHEN CURRENT_ROLE() NOT IN ('PBI_ROLE') 
+            THEN VAL
+        ELSE CONCAT(SUBSTR(VAL, 0, 4), '★★★★★★★')
+    END;
+
+    
+-- 마스킹 정책 적용
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD SET MASKING POLICY TEST2;
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_NM SET MASKING POLICY TEST3;
+
+
+-- 역할 변경
+USE ROLE PBI_ROLE;
+
+
+-- 확인
+SELECT DPTS_PCH_CD, DPTS_PCH_NM 
+FROM OG_TABLE_PC
+LIMIT 5;
+
+
+-- 역할 변경
+USE ROLE ACCOUNTADMIN;
+
+
+-----------------------------------------------
+--                                           --
+--     해당 마스킹 정책이 적용된 TABLE 조회      --
+--                                           --
+-----------------------------------------------
+
+
+SELECT *
+  FROM TABLE(information_schema.policy_references(policy_name => 'TEST2'));
+
+SELECT *
+  FROM TABLE(information_schema.policy_references(policy_name => 'TEST3'));
+
+
+-----------------------------------------------
+--                                           --
+--     해당 테이블에 적용된 마스킹 정책 조회      --
+--                                           --
+-----------------------------------------------
+  
+SELECT *
+  FROM TABLE(information_schema.policy_references(ref_entity_name => 'OG_TABLE_PC', ref_entity_domain => 'table'));
+
+
+-----------------------------------------------
+--                                           --
+--     해당 테이블에 적용된 마스킹 정책 회수      --
+--                                           --
+-----------------------------------------------
+
+
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_CD UNSET MASKING POLICY;
+ALTER TABLE IF EXISTS OG_TABLE_PC MODIFY COLUMN DPTS_PCH_NM UNSET MASKING POLICY;
+
+
+-----------------------------------------------
+--                                           --
+--     해당 마스킹 정책이 적용된 TABLE 조회      --
+--                                           --
+-----------------------------------------------
+
+
+SELECT *
+  FROM TABLE(information_schema.policy_references(policy_name => 'TEST2'));
+
+SELECT *
+  FROM TABLE(information_schema.policy_references(policy_name => 'TEST3'));
+
+
+-----------------------------------------------
+--                                           --
+--     해당 테이블에 적용된 마스킹 정책 조회      --
+--                                           --
+-----------------------------------------------
+
+  
+SELECT *
+  FROM TABLE(information_schema.policy_references(ref_entity_name => 'OG_TABLE_PC', ref_entity_domain => 'table'));
+
+  
+------------------------------------------------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 서로 다른 열에 두 개 이상의 마스킹 정책 적용 가능 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
