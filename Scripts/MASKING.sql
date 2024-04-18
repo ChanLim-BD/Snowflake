@@ -10,9 +10,9 @@ USE DATABASE HYUNDAI_DB;
 USE SCHEMA PENTA_SCHEMA;
 
 
------------------------------------------
---■■■■■■■■■■■■■ User, Role 생성 ■■■■■■■■■■■■■
------------------------------------------
+---------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■ User, Role 생성 ■■■■■■■■■■■■■■■■■■■■■
+---------------------------------------------------------
 
 
 -----------------------------------------------
@@ -265,7 +265,7 @@ DROP MASKING POLICY TEST1;
 
 
 ---------------------------------------------------------
---■■■■■ 기존 테이블의 부여된 마스킹 정책 새로운 정책으로 변경 ■■■■
+--■■■ 기존 테이블의 부여된 마스킹 정책을 새로운 정책으로 변경 ■■■
 ---------------------------------------------------------
 
 
@@ -408,6 +408,95 @@ UNSET MASKING POLICY;
 DROP MASKING POLICY TEST1;
 DROP MASKING POLICY TEST_MD;
 -- 마스킹 정책 Drop 확인
+
+---------------------------------------------------------
+--■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+---------------------------------------------------------
+
+---------------------------------------------------------
+--■■■■■■■■■■■■■■■■ 마스킹된 테이블에서의 동작  ■■■■■■■■■■■■■■■■■
+---------------------------------------------------------
+
+-- 기존 LOG_TABLE 사용
+
+-- 현재 사용자의 역할이 GEN_ROLE이라면 마스킹된 데이터를 조회하는 정책
+CREATE OR REPLACE MASKING POLICY TEST1 AS (VAL STRING) RETURNS STRING ->
+    CASE
+        WHEN CURRENT_ROLE() NOT IN ('GEN_ROLE') 
+            THEN VAL
+        ELSE CONCAT(SUBSTR(VAL, 0, 2), '********')
+    END;
+
+
+-- 마스킹 정책 부여
+ALTER TABLE LOG_TABLE MODIFY COLUMN DPTS_PCH_CD 
+SET MASKING POLICY TEST1;
+
+
+-- 역할 변경
+USE ROLE GEN_ROLE;
+
+
+-- 현재 사용자의 역할이 GEN_ROLE이므로 마스킹된 데이터 확인
+SELECT DPTS_PCH_CD, DPTS_PCH_NM 
+FROM LOG_TABLE
+LIMIT 5;
+
+
+-- 마스킹된 테이블에서 SELECT시 마스킹 문자를 LIKE로 활용할 수 있음.
+SELECT * 
+FROM LOG_TABLE
+WHERE DPTS_PCH_CD LIKE '11**%'
+LIMIT 5;
+
+
+-- 권한을 주지 않았기 때문에 일단은 삽입되지 않는다.
+-- Insufficient privileges to operate on table 'LOG_TABLE'
+INSERT INTO LOG_TABLE (DPTS_PCH_CD, DPTS_PCH_NM, BCD_LEN) VALUES ('111111', '마스킹된 행', NULL);
+
+
+-- 역할 변경
+USE ROLE ACCOUNTADMIN;
+
+
+-- GEN_ROLE에게 잠시 마스킹 정책 적용 권한 부여
+GRANT INSERT ON TABLE LOG_TABLE TO ROLE GEN_ROLE;
+
+
+-- 역할 변경
+USE ROLE GEN_ROLE;
+
+
+-- 삽입
+INSERT INTO LOG_TABLE (DPTS_PCH_CD, DPTS_PCH_NM, BCD_LEN) VALUES ('111111', '마스킹된', NULL);
+
+
+-- 마스킹된 테이블을 보는 역할인 사용자가 데이터를 삽입했을 시,
+-- 그 데이터가 마스킹된 상태의 데이터가 아닌 데이터라도
+-- 삽입 후에 해당 테이블을 조회 시, 마스킹된 상태로 조회된다.
+SELECT * 
+FROM LOG_TABLE
+WHERE DPTS_PCH_NM LIKE '마스킹%';
+
+
+-- 역할 변경
+USE ROLE ACCOUNTADMIN;
+
+
+-- 관리자가 조회하면 마스킹 해제된 데이터 조회
+SELECT * 
+FROM LOG_TABLE
+WHERE DPTS_PCH_NM LIKE '마스킹%';
+
+
+-- GEN_ROLE에게 데이터 삽입 권한 해제
+REVOKE INSERT ON TABLE LOG_TABLE FROM ROLE GEN_ROLE;
+
+
+-- LOG_TABLE 마스킹 정책 회수
+ALTER TABLE IF EXISTS LOG_TABLE MODIFY COLUMN DPTS_PCH_CD
+UNSET MASKING POLICY;
+
 
 ---------------------------------------------------------
 --■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
@@ -910,8 +999,8 @@ ALTER DYNAMIC TABLE DT_MASKING_3 REFRESH;
 -------------------------------------------------------
 
 -- ERROR LOG
--- Failed to refresh dynamic table with refresh_trigger MANUAL at data_timestamp 1713250979771 because of the error: SQL compilation error: 
--- Target table failed to refresh: SQL execution error: 
+-- Failed to refresh dynamic table with refresh_trigger MANUAL at data_timestamp 1713250979771 because of the error: 
+-- SQL compilation error: Target table failed to refresh: SQL execution error: 
 -- Dynamic table 'HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING_3' is no longer incrementalizable because of reason 
 -- 'Dynamic Tables only support 'FULL' refresh mode for sources with 'MASKING POLICY'. 
 -- Either remove the policy from 'HYUNDAI_DB.PENTA_SCHEMA.OG_TABLE_PC' or recreate the Dynamic Table.'. 
@@ -953,7 +1042,7 @@ ALTER DYNAMIC TABLE DT_MASKING_3 REFRESH;
 
 
 -- ERROR LOG
--- Failed to refresh dynamic table with refresh_trigger INITIAL at data_timestamp 1713250826808 because of the error: 
+-- Failed to refresh dynamic table with refresh_trigger MANUAL at data_timestamp 1713419437568 because of the error: 
 -- SQL compilation error: Target table failed to refresh: 
 -- SQL compilation error: Dynamic Table 'DT_MASKING_3' needs to be recreated because a base table changed.
 
@@ -972,8 +1061,10 @@ DROP TABLE DT_MASKING_3;
 
 ----------------------------------------------------------
 --■■■■■■■ 마스킹 정책은 최소 권한 원칙을 지켜야 할 것이다. ■■■■■■■
---
---     따라서, 마스킹 정책만 관리하는 관리자의 필요성을 느낌
+--                                                      --
+-- 아무 사용자나 마스킹 정책을 제어할 수 있다면 큰 일이기 때문이다.
+--                                                      --
+--     따라서, 마스킹 정책만 관리하는 관리자의 필요성을 느낌    --
 ----------------------------------------------------------
 
 -----------------------------------------------
@@ -1052,7 +1143,7 @@ USE ROLE ACCOUNTADMIN;
 
 -----------------------------------------------
 --                                           --
---         생성한 관리자 역할 TEST  완료       --
+--         생성한 관리자 역할 TEST  완료        --
 --                                           --
 -----------------------------------------------
 
