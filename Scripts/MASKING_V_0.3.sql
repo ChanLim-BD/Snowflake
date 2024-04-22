@@ -37,7 +37,7 @@ USE SCHEMA PENTA_SCHEMA;
 --                                           --
 -----------------------------------------------
 
-CREATE ROLE MASKING_ADMIN;                                                                    -- MASKING_ADMIN 생성.
+CREATE ROLE IF NOT EXISTS MASKING_ADMIN;                                                                    -- MASKING_ADMIN 생성.
 
 GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE MASKING_ADMIN;                                    -- MASKING_ADMIN에게 COMPUTE_WH명의 웨어하우스 사용 권한 부여.
 GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE MASKING_ADMIN;                                  -- MASKING_ADMIN에게 COMPUTE_WH명의 웨어하우스 동작 권한 부여 (컴퓨팅 사이즈 변경 같은)
@@ -68,7 +68,7 @@ GRANT ROLE MASKING_ADMIN TO USER PENTA_02;                                      
 --                                           --
 -----------------------------------------------
 
-CREATE ROLE GEN_ROLE;                                                           -- GEN_ROLE 생성
+CREATE ROLE IF NOT EXISTS GEN_ROLE;                                                           -- GEN_ROLE 생성
 
 GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE GEN_ROLE;                           -- GEN_ROLE에게 COMPUTE_WH명의 웨어하우스 사용 권한 부여
 GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE GEN_ROLE;                         -- GEN_ROLE에게 COMPUTE_WH명의 웨어하우스 동작 권한 부여 (컴퓨팅 사이즈 변경 같은) 
@@ -79,7 +79,6 @@ GRANT USAGE ON SCHEMA PENTA_SCHEMA TO ROLE GEN_ROLE;                            
 GRANT SELECT ON ALL TABLES IN SCHEMA HYUNDAI_DB.PENTA_SCHEMA TO ROLE GEN_ROLE;  -- GEN_ROLE에게 특정 스키마 내의 모든 테이블 조회 권한 부여
 GRANT SELECT ON FUTURE TABLES IN DATABASE HYUNDAI_DB TO ROLE GEN_ROLE;          -- GEN_ROLE에게 미래의 대한 테이블 조회 권한 부여
 GRANT SELECT ON FUTURE DYNAMIC TABLES IN DATABASE HYUNDAI_DB TO ROLE GEN_ROLE;  -- GEN_ROLE에게 미래의 대한 동적 테이블 조회 권한 부여
-
 
 -- 사용자에게 생성한 Role 권한 부여
 GRANT ROLE GEN_ROLE TO USER PENTA_02;                                           -- 특정 사용자에게 MASKING_ADMIN 역할 사용 권한 부여.
@@ -111,7 +110,7 @@ SHOW GRANTS OF ROLE GEN_ROLE;
 --■■■■■■■■■■■■■■■ TEST를 위한 LOG_TABLE 생성  ■■■■■■■■■■■■■■■■
 ---------------------------------------------------------
 
-CREATE OR REPLACE TABLE LOG_TABLE AS 
+CREATE TABLE IF NOT EXISTS LOG_TABLE AS 
     SELECT * 
     FROM HYUNDAI_DB.HDHS_PD.IM_DPTS_PCH_CD_LOG t1
     WHERE LENGTH(t1.dpts_pch_cd) = 6;
@@ -218,16 +217,13 @@ SELECT POLICY_NAME
       , REF_COLUMN_NAME AS REF_COLUMN
       , POLICY_STATUS
   FROM TABLE(information_schema.policy_references(ref_entity_name => 'LOG_TABLE', ref_entity_domain => 'table'));
-
-
-SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.POLICY_REFERENCES;
   
 -----------------------------------------------------------------------
 --  위의 조회 명령어는 특정 '정책' 또는 'Table(View)를 지정하고 조회할 수 있다.
 --  따라서, 정책 이름을 모른다면 이를 이용할 수 없다. 즉, 관리하기 어렵다.
 -----------------------------------------------------------------------
 
--- 테이블에 직접 한 열에 여러 마스킹 정책을 부여할 수 없다.
+-- 이미 마스킹 정책이 부여된 열에 또다시 정책을 부여할 수 없다.
 ALTER TABLE IF EXISTS LOG_TABLE MODIFY COLUMN DPTS_PCH_CD 
 SET MASKING POLICY TEST3;
 
@@ -272,7 +268,6 @@ USE ROLE ACCOUNTADMIN;
 -- 마스킹 정책 조회
 SHOW MASKING POLICIES;
 
-
 -- 특정 정책이 부여된 테이블 조회
 SELECT POLICY_NAME
       , POLICY_KIND
@@ -296,13 +291,11 @@ SELECT POLICY_NAME
       , POLICY_STATUS
   FROM TABLE(information_schema.policy_references(ref_entity_name => 'LOG_TABLE', ref_entity_domain => 'table'));
 
-
 ------------------------------------
 --■■ account usage를 통해서 전체 현황 조회 ■■
 ------------------------------------
 -- Snowflake account_usage의 내부 메타데이터 저장소에서 데이터를 추출하는 프로세스로 인해
 -- 전체 마스킹 정책의 현황을 조회할 때 활용하는 것을 추천.
-
 
 -- account usage로 마스킹 정책 조회
 SELECT POLICY_NAME, POLICY_OWNER, POLICY_CATALOG, POLICY_SCHEMA
@@ -356,6 +349,7 @@ LEFT OUTER JOIN PolicyReferences pr
 ON mp.POLICY_NAME = pr.POLICY_NAME
 ORDER BY mp.POLICY_NAME;
 
+
 -- DYNAMIC_POLICY View 생성 
 CREATE VIEW IF NOT EXISTS dynamic_policy_view AS
 WITH MaskingPolicies AS (
@@ -387,8 +381,19 @@ LEFT OUTER JOIN PolicyReferences pr
 ON mp.POLICY_NAME = pr.POLICY_NAME
 ORDER BY mp.POLICY_NAME;
 
+
 -- View 호출
 SELECT * FROM dynamic_policy_view;
+
+-- 마스킹 정책이 활성화된 것만 호출
+SELECT * FROM dynamic_policy_view
+WHERE POLICY_STATUS = 'ACTIVE';
+
+-- LOG_TABLE 중 마스킹 정책이 활성화된 것만 호출
+SELECT * FROM dynamic_policy_view
+WHERE POLICY_STATUS = 'ACTIVE'
+AND REF_TABLE = 'LOG_TABLE';
+
 
 ---------------------------------------------------------
 --■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
@@ -411,8 +416,21 @@ SELECT * FROM dynamic_policy_view;
 --■■■■■■■■■■■■■■■■■■ TAG Test를 위한 준비 ■■■■■■■■■■■■■■■■■■■
 ---------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS HYUNDAI_DB.PENTA_SCHEMA.CUSTOMERS(CUSTID INT, NAME STRING, PII VARCHAR, EMAIL VARCHAR, PHONE VARCHAR);
-CREATE TABLE IF NOT EXISTS HYUNDAI_DB.PENTA_SCHEMA.EMPLOYEES(EMPID INT, NAME STRING, PII VARCHAR, EMAIL VARCHAR, PHONE VARCHAR);
+CREATE TABLE IF NOT EXISTS HYUNDAI_DB.PENTA_SCHEMA.CUSTOMERS(
+CUSTID INT
+, NAME STRING
+, PII VARCHAR
+, EMAIL VARCHAR
+, PHONE VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS HYUNDAI_DB.PENTA_SCHEMA.EMPLOYEES(
+EMPID INT
+, NAME STRING
+, PII VARCHAR
+, EMAIL VARCHAR
+, PHONE VARCHAR
+);
 
 INSERT INTO HYUNDAI_DB.PENTA_SCHEMA.CUSTOMERS VALUES
 (1, 'JACK', '900101-1100223', 'abc@naver.com', '010-1111-1111'), 
@@ -597,6 +615,11 @@ ORDER BY tg.TAG_NAME;
 -- dynamic_tag_policy_view 호출 
 SELECT * FROM dynamic_tag_policy_view;
 
+-- dynamic_tag_policy_view 특정 테이블 호출 
+SELECT * 
+FROM dynamic_tag_policy_view
+WHERE REF_TABLE = 'CUSTOMERS';
+
 ---------------------------------------------------------
 --■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 ---------------------------------------------------------
@@ -610,7 +633,13 @@ SELECT * FROM dynamic_tag_policy_view;
 --              원활하게 삽입되며, 마스킹도 잘 적용된다.
 -----------------------------------------------------------
 -- ORIGIN TABLE 생성 
-CREATE TABLE IF NOT EXISTS HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE(ID INT, NAME STRING, PII VARCHAR, EMAIL VARCHAR, PHONE VARCHAR);
+CREATE TABLE IF NOT EXISTS HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE(
+ID INT
+, NAME STRING
+, PII VARCHAR
+, EMAIL VARCHAR
+, PHONE VARCHAR
+);
 
 INSERT INTO HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE VALUES
 (1, 'PACK', '920101-1100223', 'adsadbc@naver.com', '010-2222-1111'), 
@@ -630,16 +659,16 @@ ALTER DYNAMIC TABLE HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING SUSPEND;
 SELECT * FROM HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING;
 
 -- ORIGIN TABLE에 데이터 마스킹 정책 태그 적용 
-ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE 
-MODIFY COLUMN PII SET TAG PII_TAG = 'PII';
-ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE 
-MODIFY COLUMN PHONE SET TAG PHONE_TAG = 'PHONE';
+ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE MODIFY COLUMN PII 
+SET TAG PII_TAG = 'PII';
+ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE MODIFY COLUMN PHONE 
+SET TAG PHONE_TAG = 'PHONE';
 
 -- DYNAMIC TABLE에 데이터 마스킹 정책 태그 적용 
-ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING 
-MODIFY COLUMN PII SET TAG PII_TAG = 'PII';
-ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING 
-MODIFY COLUMN PHONE SET TAG PHONE_TAG = 'PHONE';
+ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING MODIFY COLUMN PII 
+SET TAG PII_TAG = 'PII';
+ALTER TABLE HYUNDAI_DB.PENTA_SCHEMA.DT_MASKING MODIFY COLUMN PHONE 
+SET TAG PHONE_TAG = 'PHONE';
 
 -- 데이터 삽입 시
 INSERT INTO HYUNDAI_DB.PENTA_SCHEMA.ORIGIN_TABLE VALUES
