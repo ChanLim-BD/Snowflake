@@ -1,7 +1,7 @@
 CREATE OR REPLACE PROCEDURE HYUNDAI_DB.PENTA_SCHEMA.STOREDPROC3()
 RETURNS VARCHAR
 LANGUAGE SQL
-AS $$	
+AS 	
 DECLARE
     -- 변수 선언
     today  DATE;
@@ -118,5 +118,4 @@ BEGIN
 
     RETURN '변수 출력 테스트를 완료했습니다.';
 END;
-$$
 ;
